@@ -1,0 +1,50 @@
+这里主要提一下GCD的一些坑和线程的一些问题。
+1. 死锁
+
+dispatch_sync
+
+// 假设这段代码执行于主队列
+dispatch_queue_t serialQueue = dispatch_queue_create("serialQueue", DISPATCH_QUEUE_SERIAL);
+dispatch_queue_t mainQueue = dispatch_get_main_queue();
+
+// 在主队列添加同步任务
+dispatch_sync(mainQueue, ^{
+    // 任务
+    ...
+});
+
+// 在串行队列添加同步任务 
+dispatch_sync(serialQueue, ^{
+    // 任务
+    ...
+    dispatch_sync(serialQueue, ^{
+        // 任务
+        ...
+    });
+};
+dispatch_apply
+
+// 因为dispatch_apply会卡住当前线程，内部的dispatch_apply会等待外部，外部的等待内部，所以死锁。
+dispatch_queue_t queue = dispatch_queue_create("queue", DISPATCH_QUEUE_CONCURRENT);
+dispatch_apply(10, queue, ^(size_t) {
+    // 任务
+    ...
+    dispatch_apply(10, queue, ^(size_t) {
+        // 任务
+        ...
+    });
+});
+dispatch_barrier
+dispatch_barrier_sync在串行队列和全局并行队列里面和dispatch_sync同样的效果，所以需考虑同dispatch_sync一样的死锁问题。
+
+2. dispatch_time_t
+
+// dispatch_time_t一般在dispatch_after和dispatch_group_wait等方法里作为参数使用。这里最需要注意的是一些宏的含义。
+// NSEC_PER_SEC，每秒有多少纳秒。
+// USEC_PER_SEC，每秒有多少毫秒。
+// NSEC_PER_USEC，每毫秒有多少纳秒。
+// DISPATCH_TIME_NOW 从现在开始
+// DISPATCH_TIME_FOREVE 永久
+
+// time为1s的写法
+dispatch_time_t time = dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC);
